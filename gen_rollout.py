@@ -42,7 +42,7 @@ def make_rollout_shm_name(rollout_shm: RolloutShmHandles) -> RolloutShmName:
     )
 
 
-Callback = (
+LogCallback = (
     Callable[[RolloutBufferArray], Any]
     | list[Callable[[RolloutBufferArray], Any]]
     | dict[str, Callable[[RolloutBufferArray], Any]]
@@ -50,7 +50,7 @@ Callback = (
 Log = Any | list["Log"] | dict[str, "Log"]
 
 
-def log_from_array(rollout: RolloutBufferArray, callback: Callback) -> Log:
+def log_from_array(rollout: RolloutBufferArray, callback: LogCallback) -> Log:
     if isinstance(callback, list):
         return [log_from_array(rollout, cb) for cb in callback]
     elif isinstance(callback, dict):
@@ -95,7 +95,7 @@ def gen_rollout(
     queue: Queue,
     model: ActorCritic,
     config: WorkerConfig,
-    log_callback: Callback,
+    log_callback: LogCallback,
     version: Synchronized[int],
 ):
     env = config.build_env(worker_id)
@@ -104,6 +104,9 @@ def gen_rollout(
     while True:
         try:
             with version.get_lock():
+                # end condition for workers
+                if version.value == -1:
+                    break
                 if now_model_version < version.value:
                     now_model_version = version.value
                     model_copy.load_state_dict(model.state_dict())
@@ -141,6 +144,7 @@ def gen_rollout(
             rsh.close()
         except Exception as e:
             print(f"Worker {worker_id} encountered an error: {e}")
+    env.close()
 
 
 class RolloutGenerator:
@@ -154,7 +158,7 @@ class RolloutGenerator:
         cpu_model: ActorCritic,
         gpu_model: ActorCritic,
         max_queue: int,
-        log_callback: Callback,
+        log_callback: LogCallback,
         config: WorkerConfig,
     ) -> None:
         workers = []
