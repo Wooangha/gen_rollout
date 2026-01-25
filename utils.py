@@ -45,7 +45,7 @@ def obs_buffer_to_array(buffer: ObsBuffer) -> ObsBufferArray:
     elif isinstance(buffer, tuple):
         return tuple(obs_buffer_to_array(subbuffer) for subbuffer in buffer)
     else:
-        return np.concatenate(buffer)
+        return np.stack(buffer)
 
 
 ObsArrayBytes = int | dict[str, "ObsArrayBytes"] | tuple["ObsArrayBytes", ...]

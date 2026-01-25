@@ -41,7 +41,7 @@ class RolloutDtypes:
     act: np.dtype
     reward: np.dtype
     truncated: np.dtype
-    done: np.dtype
+    terminated: np.dtype
     logp: np.dtype
 
 
@@ -51,7 +51,7 @@ class RolloutShape:
     act: tuple[int, ...]
     reward: tuple[int, ...]
     truncated: tuple[int, ...]
-    done: tuple[int, ...]
+    terminated: tuple[int, ...]
     logp: tuple[int, ...]
 
 
@@ -65,6 +65,7 @@ class RolloutBuffer:
         obs_space: Space,
     ):
         self.obs_space = obs_space
+        self.init()
 
     def init(self):
         """Initialize the buffer"""
@@ -72,7 +73,7 @@ class RolloutBuffer:
         self.act_buffer: list[int | np.ndarray] = []
         self.reward_buffer = []
         self.truncated_buffer = []
-        self.done_buffer = []
+        self.terminated_buffer = []
         self.logp_buffer = []
 
     def add(
@@ -81,14 +82,14 @@ class RolloutBuffer:
         act: int | np.ndarray,
         reward: float,
         truncated: bool,
-        done: bool,
+        terminated: bool,
         logp: float,
     ):
         append_to_obs_buffer(self.obs_buffer, obs)
         self.act_buffer.append(act)
         self.reward_buffer.append(reward)
         self.truncated_buffer.append(truncated)
-        self.done_buffer.append(done)
+        self.terminated_buffer.append(terminated)
         self.logp_buffer.append(logp)
 
     def add_last_obs(self, next_obs: ObsType):
@@ -105,7 +106,7 @@ class RolloutBuffer:
         del self.act_buffer
         del self.reward_buffer
         del self.truncated_buffer
-        del self.done_buffer
+        del self.terminated_buffer
         del self.logp_buffer
 
         self.init()
@@ -120,7 +121,7 @@ class RolloutBuffer:
             np.array(self.act_buffer),
             np.array(self.reward_buffer, dtype=np.float32),
             np.array(self.truncated_buffer, dtype=bool),
-            np.array(self.done_buffer, dtype=bool),
+            np.array(self.terminated_buffer, dtype=bool),
             np.array(self.logp_buffer, dtype=np.float32),
         )
 
@@ -136,14 +137,14 @@ class RolloutShmHandles:
         act_shm: SharedMemory,
         reward_shm: SharedMemory,
         truncated_shm: SharedMemory,
-        done_shm: SharedMemory,
+        terminated_shm: SharedMemory,
         logp_shm: SharedMemory,
     ):
         self.obs_shm = obs_shm
         self.act_shm = act_shm
         self.reward_shm = reward_shm
         self.truncated_shm = truncated_shm
-        self.done_shm = done_shm
+        self.terminated_shm = terminated_shm
         self.logp_shm = logp_shm
 
     def close(self):
@@ -152,7 +153,7 @@ class RolloutShmHandles:
         self.act_shm.close()
         self.reward_shm.close()
         self.truncated_shm.close()
-        self.done_shm.close()
+        self.terminated_shm.close()
         self.logp_shm.close()
 
     def unlink(self):
@@ -161,7 +162,7 @@ class RolloutShmHandles:
         self.act_shm.unlink()
         self.reward_shm.unlink()
         self.truncated_shm.unlink()
-        self.done_shm.unlink()
+        self.terminated_shm.unlink()
         self.logp_shm.unlink()
 
 
@@ -176,14 +177,14 @@ class RolloutBufferArray:
         act_array: np.ndarray,
         reward_array: np.ndarray,
         truncated_array: np.ndarray,
-        done_array: np.ndarray,
+        terminated_array: np.ndarray,
         logp_array: np.ndarray,
     ):
         self.obs_array = obs_array
         self.act_array = act_array
         self.reward_array = reward_array
         self.truncated_array = truncated_array
-        self.done_array = done_array
+        self.terminated_array = terminated_array
         self.logp_array = logp_array
 
     @property
@@ -200,7 +201,7 @@ class RolloutBufferArray:
             self.act_array.nbytes,
             self.reward_array.nbytes,
             self.truncated_array.nbytes,
-            self.done_array.nbytes,
+            self.terminated_array.nbytes,
             self.logp_array.nbytes,
         )
 
@@ -213,7 +214,7 @@ class RolloutBufferArray:
             self.act_array.shape,
             self.reward_array.shape,
             self.truncated_array.shape,
-            self.done_array.shape,
+            self.terminated_array.shape,
             self.logp_array.shape,
         )
 
@@ -235,7 +236,7 @@ class RolloutBufferArray:
             self.act_array.dtype,
             self.reward_array.dtype,
             self.truncated_array.dtype,
-            self.done_array.dtype,
+            self.terminated_array.dtype,
             self.logp_array.dtype,
         )
 
@@ -245,21 +246,21 @@ class RolloutBufferArray:
         act_shm = SharedMemory(create=True, size=self.act_array.nbytes)
         reward_shm = SharedMemory(create=True, size=self.reward_array.nbytes)
         truncated_shm = SharedMemory(create=True, size=self.truncated_array.nbytes)
-        done_shm = SharedMemory(create=True, size=self.done_array.nbytes)
+        terminated_shm = SharedMemory(create=True, size=self.terminated_array.nbytes)
         logp_shm = SharedMemory(create=True, size=self.logp_array.nbytes)
 
         shm_obs_array = make_obs_with_shm(self.obs_array, obs_shm)
         shm_act_array = np.ndarray(self.act_array.shape, dtype=self.act_array.dtype, buffer=act_shm.buf)
         shm_reward_array = np.ndarray(self.reward_array.shape, dtype=self.reward_array.dtype, buffer=reward_shm.buf)
         shm_truncated_array = np.ndarray(self.truncated_array.shape, dtype=self.truncated_array.dtype, buffer=truncated_shm.buf)
-        shm_done_array = np.ndarray(self.done_array.shape, dtype=self.done_array.dtype, buffer=done_shm.buf)
+        shm_terminated_array = np.ndarray(self.terminated_array.shape, dtype=self.terminated_array.dtype, buffer=terminated_shm.buf)
         shm_logp_array = np.ndarray(self.logp_array.shape, dtype=self.logp_array.dtype, buffer=logp_shm.buf)
 
         copy_obs(self.obs_array, shm_obs_array)
         np.copyto(shm_act_array, self.act_array)
         np.copyto(shm_reward_array, self.reward_array)
         np.copyto(shm_truncated_array, self.truncated_array)
-        np.copyto(shm_done_array, self.done_array)
+        np.copyto(shm_terminated_array, self.terminated_array)
         np.copyto(shm_logp_array, self.logp_array)
 
         return (
@@ -267,7 +268,7 @@ class RolloutBufferArray:
             act_shm,
             reward_shm,
             truncated_shm,
-            done_shm,
+            terminated_shm,
             logp_shm,
         )
 
@@ -277,7 +278,7 @@ class RolloutBufferArray:
         del self.act_array
         del self.reward_array
         del self.truncated_array
-        del self.done_array
+        del self.terminated_array
         del self.logp_array
 
     @classmethod
@@ -292,14 +293,14 @@ class RolloutBufferArray:
         act_array = np.ndarray(shapes.act, dtype=dtypes.act, buffer=shms.act_shm.buf)
         reward_array = np.ndarray(shapes.reward, dtype=dtypes.reward, buffer=shms.reward_shm.buf)
         truncated_array = np.ndarray(shapes.truncated, dtype=dtypes.truncated, buffer=shms.truncated_shm.buf)
-        done_array = np.ndarray(shapes.done, dtype=dtypes.done, buffer=shms.done_shm.buf)
+        terminated_array = np.ndarray(shapes.terminated, dtype=dtypes.terminated, buffer=shms.terminated_shm.buf)
         logp_array = np.ndarray(shapes.logp, dtype=dtypes.logp, buffer=shms.logp_shm.buf)
         return cls(
             obs_array,
             act_array,
             reward_array,
             truncated_array,
-            done_array,
+            terminated_array,
             logp_array,
         )
 
@@ -322,29 +323,30 @@ def compute_gae(
     ac: ActorCritic,
 ) -> PPOBatch:
     value = np.zeros(rollout.size + 1, dtype=np.float32)
+    device = next(ac.parameters()).device
     with th.no_grad():
         obs = rollout.obs_array
         for start in range(0, rollout.size + 1, value_batch_size):
-            end = min(start + value_batch_size, rollout.size)
+            end = min(start + value_batch_size, rollout.size + 1)
             obs_batch = slice_obs_array(obs, start, end)
-            i = obs_to_device(obs_to_tensor(obs_batch), ac.device)
-            value[start:end] = ac.only_value(i).cpu().numpy()
+            i = obs_to_device(obs_to_tensor(obs_batch), device)
+            value[start:end] = ac.only_value(i).cpu().numpy().flatten()
 
     adv = np.zeros(rollout.size, dtype=np.float32)
     last_gae_lam = 0.0
     for t in reversed(range(rollout.size)):
-        nonterminal = 1.0 - float(rollout.done_array[t])
+        nonterminal = 1.0 - float(rollout.terminated_array[t])
         delta = rollout.reward_array[t] + gamma * value[t + 1] * nonterminal - value[t]
         adv[t] = last_gae_lam = delta + gamma * lam * nonterminal * last_gae_lam
     ret = adv + value[:-1]
 
     return PPOBatch(
-        obs=clone_obs(obs_to_tensor(slice_obs_array(obs, 0, rollout.size))),
+        obs=clone_obs(obs_to_tensor(slice_obs_array(rollout.obs_array, 0, rollout.size))),
         act=th.from_numpy(rollout.act_array).clone(),
         logp_old=th.from_numpy(rollout.logp_array).clone(),
-        adv=th.from_numpy(adv).clone(),
-        ret=th.from_numpy(ret).clone(),
-        val_old=th.from_numpy(value[:-1]).clone(),
+        adv=th.from_numpy(adv),
+        ret=th.from_numpy(ret),
+        val_old=th.from_numpy(value[:-1]),
     )
 
 
