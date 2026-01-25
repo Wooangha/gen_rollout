@@ -1,4 +1,4 @@
-from typing import TypedDict, Type, Optional, TypeVar, Generic
+from typing import TypedDict, Type, Optional, TypeVar, Generic, TypeGuard
 
 import numpy as np
 import torch as th
@@ -62,33 +62,23 @@ class ActorCritic(nn.Module):
         """
         super().__init__()
         if isinstance(feature_extractor_cls, tuple):
-            self.feature_extractor = nn.ModuleList(
-                [
-                    (
-                        feature_extractor_cls[0](**feature_extractor_kwargs)
-                        if feature_extractor_kwargs
-                        else feature_extractor_cls[0]()
-                    ),
-                    (
-                        feature_extractor_cls[1](**feature_extractor_kwargs)
-                        if feature_extractor_kwargs
-                        else feature_extractor_cls[1]()
-                    ),
-                ]
-            )
-            self.feature_extractor[0].apply(
+            self.actor_feature_extractor = feature_extractor_cls[0](**feature_extractor_kwargs) if feature_extractor_kwargs else feature_extractor_cls[0]()
+            self.critic_feature_extractor = feature_extractor_cls[1](**feature_extractor_kwargs) if feature_extractor_kwargs else feature_extractor_cls[1]()
+            self.actor_feature_extractor.apply(
                 lambda m: layer_init(m) if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d) else None
             )
-            self.feature_extractor[1].apply(
+            self.critic_feature_extractor.apply(
                 lambda m: layer_init(m) if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d) else None
             )
         else:
-            self.feature_extractor = (
+            self.actor_feature_extractor = (
                 feature_extractor_cls(**feature_extractor_kwargs) if feature_extractor_kwargs else feature_extractor_cls()
             )
-            self.feature_extractor.apply(
+            self.actor_feature_extractor.apply(
                 lambda m: layer_init(m) if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d) else None
             )
+            
+            self.critic_feature_extractor = None
         self.policy_head = policy_head_cls(**policy_head_kwargs) if policy_head_kwargs else policy_head_cls()
         self.value_head = value_head_cls(**value_head_kwargs) if value_head_kwargs else value_head_cls()
 
@@ -100,16 +90,16 @@ class ActorCritic(nn.Module):
     def feature_extract(self, obs: ObsType | ObsNumpy) -> th.Tensor | tuple[th.Tensor, th.Tensor]:
         """Extract features from observations"""
         obs = numpy2torch(obs)
-        if isinstance(self.feature_extractor, tuple):
-            feat_actor = self.feature_extractor[0](obs)
-            feat_critic = self.feature_extractor[1](obs)
+        if self.critic_feature_extractor is not None:
+            feat_actor = self.actor_feature_extractor(obs)
+            feat_critic = self.critic_feature_extractor(obs)
             return feat_actor, feat_critic
         else:
-            return self.feature_extractor(obs)
+            return self.actor_feature_extractor(obs)
 
     def value_policy_dist(self, obs: ObsType) -> tuple[th.Tensor, th.distributions.Categorical]:
         feat_out = self.feature_extract(obs)
-        if isinstance(feat_out, tuple):
+        if self.critic_feature_extractor is not None:
             feat_actor, feat_critic = feat_out
             val: th.Tensor = self.value_head(feat_critic)
             logits: th.Tensor = self.policy_head(feat_actor)
@@ -120,7 +110,7 @@ class ActorCritic(nn.Module):
 
     def only_policy_dist(self, obs: ObsType) -> th.distributions.Categorical:
         feat_out = self.feature_extract(obs)
-        if isinstance(feat_out, tuple):
+        if self.critic_feature_extractor is not None:
             feat_actor, _ = feat_out
             logits: th.Tensor = self.policy_head(feat_actor)
         else:
@@ -129,7 +119,7 @@ class ActorCritic(nn.Module):
 
     def only_value(self, obs: ObsType) -> th.Tensor:
         feat_out = self.feature_extract(obs)
-        if isinstance(feat_out, tuple):
+        if self.critic_feature_extractor is not None:
             _, feat_critic = feat_out
             val: th.Tensor = self.value_head(feat_critic)
         else:
