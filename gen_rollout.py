@@ -158,7 +158,7 @@ def gen_rollout(
                     t_step += time.perf_counter() - t1
 
                     done = terminated or truncated
-                    rollout_buffer.add(obs, a, reward, truncated, terminated, logp.cpu().numpy())  # type: ignore
+                    rollout_buffer.add(obs, a, reward, truncated, terminated, logp.cpu().numpy().item())  # type: ignore
                     obs = next_obs
                     if pause.value:
                         break_rollout = True
